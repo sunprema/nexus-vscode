@@ -1,7 +1,7 @@
 {
   "name": "nexus-explainer",
   "displayName": "Nexus Explainer",
-  "description": "View Project Nexus's explainer-branch narrative for the file you're editing, split-screen, without leaving VS Code.",
+  "description": "View Project Nexus's explainer-branch narrative for the file you're editing — a CodeLens at the top of the file, split-screen, without leaving VS Code.",
   "version": "0.1.0",
   "license": "MIT",
   "engines": {
@@ -10,13 +10,20 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "nexus.showExplainer",
         "title": "Nexus: Show Explainer",
+        "category": "Nexus"
+      },
+      {
+        "command": "nexus.refreshCodeLenses",
+        "title": "Nexus: Refresh Explainer Status",
         "category": "Nexus"
       }
     ],
@@ -30,6 +37,9 @@
       "commandPalette": [
         {
           "command": "nexus.showExplainer"
+        },
+        {
+          "command": "nexus.refreshCodeLenses"
         }
       ]
     },

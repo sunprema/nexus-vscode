@@ -7,10 +7,17 @@ working tree.
 
 ## What it does today
 
-Run **Nexus: Show Explainer** (Command Palette, editor right-click menu, or
-`Ctrl+Alt+E` / `Cmd+Alt+E`) with a file open. It opens a read-only Markdown
+Open any file in a repo where `entire nexus init` has run, and a CodeLens
+appears at the top: **📖 Nexus: View Explainer**, **📖 Nexus: No explainer
+yet**, or **⚠️ Nexus: View Explainer (desync flagged)** — click it, or run
+**Nexus: Show Explainer** from the Command Palette / editor right-click menu
+/ `Ctrl+Alt+E` / `Cmd+Alt+E`. Either way it opens a read-only Markdown
 preview beside your editor showing that file's current entry from the
 `explainer` branch.
+
+There's exactly one CodeLens per file, not per function — Nexus narrates
+a whole file at a time, so a per-symbol lens would have nothing distinct
+to point at yet (that needs the line-mapping piece from TR4.3, not built).
 
 Nothing is checked out or written to disk. The extension shells out to
 [`entire nexus show <path> --json`](../nexus-cli/cmd/entire/cli/nexus_show.go)
@@ -19,7 +26,11 @@ explainer branch's git objects directly. `entire` (this project's CLI fork)
 must be installed and on `PATH`.
 
 If the file hasn't been narrated yet, or Nexus isn't set up in the repo,
-the preview says so instead of showing stale or missing content silently.
+the CodeLens and the preview both say so instead of showing stale or
+missing content silently. If Nexus isn't set up in a repo at all, no
+CodeLens appears (checked once per repo root per session — run **Nexus:
+Refresh Explainer Status**, or reload the window, after running
+`entire nexus init` on an already-open repo).
 
 ## Requirements
 
@@ -59,13 +70,11 @@ freshly-narrated file never shows stale content from before.
 
 ## Roadmap (not yet built)
 
-- CodeLens annotations per function/file ("view explainer") instead of
-  requiring the command/keybinding.
 - Source Control panel integration — surface the explainer next to a
   changed file when reviewing a diff, closer to the PRD's actual reviewer
   workflow (read the explainer instead of the code diff).
-- Staleness/desync indicators, using `desynced`/`desync_markers` from
-  `nexus show --json` (already returned, not yet surfaced in the UI) and
-  `.nexus/pending.json` (not yet read by this extension at all).
+- `.nexus/pending.json` awareness — the CodeLens already reflects a single
+  file's desync status, but not whether `main` has moved past what's been
+  narrated at all.
 - Scroll-sync between code and explainer — needs the line-mapping
   ("sourcemap") piece from TR4.3, deliberately deferred so far.
