@@ -25,6 +25,16 @@
         "command": "nexus.refreshCodeLenses",
         "title": "Nexus: Refresh Explainer Status",
         "category": "Nexus"
+      },
+      {
+        "command": "nexus.showExplainerDiff",
+        "title": "Nexus: Show Explainer Diff",
+        "category": "Nexus"
+      },
+      {
+        "command": "nexus.startTour",
+        "title": "Nexus: Start Tour",
+        "category": "Nexus"
       }
     ],
     "menus": {
@@ -32,6 +42,22 @@
         {
           "command": "nexus.showExplainer",
           "group": "navigation"
+        },
+        {
+          "command": "nexus.showExplainerDiff",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "nexus.showExplainer",
+          "group": "navigation",
+          "when": "!explorerResourceIsFolder"
+        },
+        {
+          "command": "nexus.showExplainerDiff",
+          "group": "navigation",
+          "when": "!explorerResourceIsFolder"
         }
       ],
       "commandPalette": [
@@ -40,6 +66,12 @@
         },
         {
           "command": "nexus.refreshCodeLenses"
+        },
+        {
+          "command": "nexus.showExplainerDiff"
+        },
+        {
+          "command": "nexus.startTour"
         }
       ]
     },
@@ -49,6 +81,11 @@
         "key": "ctrl+alt+e",
         "mac": "cmd+alt+e",
         "when": "editorTextFocus"
+      },
+      {
+        "command": "nexus.showExplainer",
+        "key": "x",
+        "when": "filesExplorerFocus && !inputFocus && !explorerResourceIsFolder"
       }
     ]
   },
