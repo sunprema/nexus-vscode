@@ -41,12 +41,16 @@ Refresh Explainer Status**, or reload the window, after running
 
 ## Installation
 
-Grab the `.vsix` from the [latest release](https://github.com/sunprema/nexus-vscode/releases/latest),
+Grab the `.vsix` from the [latest release](https://github.com/sunprema/nexus-vscode/releases/latest)
+(e.g. [`nexus-explainer-0.1.0.vsix`](https://github.com/sunprema/nexus-vscode/releases/download/v0.1.0/nexus-explainer-0.1.0.vsix)),
 then either:
 
 - In VS Code: open the Extensions view → `...` menu → **Install from
   VSIX...** → pick the downloaded file.
-- Or from a terminal: `code --install-extension nexus-explainer-<version>.vsix`.
+- Or from a terminal:
+  ```bash
+  code --install-extension nexus-explainer-0.1.0.vsix
+  ```
 
 No cloning or Extension Development Host required.
 
