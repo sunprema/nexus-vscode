@@ -22,7 +22,7 @@ class ExplainerCodeLens extends vscode.CodeLens {
  * test is (textually) found — see findTestLine. Unlike ExplainerCodeLens,
  * this is fully resolved up front (command + title set in the
  * constructor): its position AND its content both come from the same
- * `entire nexus show` call, so there's no separate cheaper "just show a
+ * `nexus show` call, so there's no separate cheaper "just show a
  * placeholder" phase to defer work to.
  */
 class TestIntentCodeLens extends vscode.CodeLens {
@@ -75,11 +75,11 @@ function truncate(text: string, max: number): string {
  * lens's *position* depends on the file's current text, so the whole
  * lookup has to happen up front in provideCodeLenses and is worth
  * memoizing per edit rather than re-shelling out on every call for an
- * unchanged buffer. Running `entire nexus init` on an already-open repo
+ * unchanged buffer. Running `nexus init` on an already-open repo
  * won't make lenses appear on its own — run "Nexus: Refresh Explainer
  * Status" (which clears all three caches; see refresh()), or reload the
  * window. The top lens's own found/desynced status is never cached:
- * resolveCodeLens always re-shells to `entire nexus show`, matching
+ * resolveCodeLens always re-shells to `nexus show`, matching
  * ExplainerContentProvider's "always read fresh" choice, since that call
  * is cheap (a git-object read, no LLM).
  */
@@ -93,7 +93,7 @@ export class ExplainerCodeLensProvider implements vscode.CodeLensProvider<NexusC
 
   /** Clears every cache and forces every visible editor to re-request its
    * CodeLenses. This is what "Nexus: Refresh Explainer Status" calls — the
-   * intended fix for "I just ran `entire nexus init` and no CodeLens
+   * intended fix for "I just ran `nexus init` and no CodeLens
    * appeared", or "I just narrated and the test intents are stale". */
   refresh(): void {
     this.repoRootCache.clear();

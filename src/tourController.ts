@@ -8,7 +8,7 @@ const END_TOUR = "End Tour";
 
 /**
  * Entry point for "Nexus: Start Tour": lists the tours available in this
- * repo (from `entire nexus map`, filtered to kind === "tour" — no separate
+ * repo (from `nexus map`, filtered to kind === "tour" — no separate
  * "list tours" command needed), lets the user pick one, then walks its
  * stops. Every read goes through nexus-cli, same as the explainer/diff
  * commands, so slug resolution and stop ordering stay owned by the CLI.

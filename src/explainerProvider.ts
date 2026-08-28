@@ -27,7 +27,7 @@ function codePathFromUri(uri: vscode.Uri): string {
 /**
  * Serves explainer content as read-only virtual documents. Never reads the
  * explainer branch's git objects itself — every request shells out to
- * `entire nexus show`, so path-mapping and branch resolution stay owned by
+ * `nexus show`, so path-mapping and branch resolution stay owned by
  * nexus-cli, not duplicated here.
  */
 export class ExplainerContentProvider implements vscode.TextDocumentContentProvider {
@@ -58,7 +58,7 @@ export class ExplainerContentProvider implements vscode.TextDocumentContentProvi
       return (
         `# ${codePath}\n\n` +
         "_No explainer entry yet for this file. Run the `narrate` skill in your " +
-        "coding agent to create one — `entire nexus sync` shows what's pending._\n"
+        "coding agent to create one — `nexus sync` shows what's pending._\n"
       );
     }
 

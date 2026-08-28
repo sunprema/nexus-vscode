@@ -7,7 +7,7 @@ working tree.
 
 ## What it does today
 
-Open any file in a repo where `entire nexus init` has run, and a CodeLens
+Open any file in a repo where `nexus init` has run, and a CodeLens
 appears at the top: **📖 Nexus: View Explainer**, **📖 Nexus: No explainer
 yet**, or **⚠️ Nexus: View Explainer (desync flagged)** — click it, or run
 **Nexus: Show Explainer** from the Command Palette / editor right-click menu
@@ -20,22 +20,22 @@ a whole file at a time, so a per-symbol lens would have nothing distinct
 to point at yet (that needs the line-mapping piece from TR4.3, not built).
 
 Nothing is checked out or written to disk. The extension shells out to
-[`entire nexus show <path> --json`](../nexus-cli/cmd/entire/cli/nexus_show.go)
+[`nexus show <path> --json`](../nexus-cli/internal/cli/show.go)
 — the same command a script or CI job would use — which reads the
-explainer branch's git objects directly. `entire` (this project's CLI fork)
-must be installed and on `PATH`.
+explainer branch's git objects directly. `nexus` (Project Nexus's standalone
+CLI) must be installed and on `PATH`.
 
 If the file hasn't been narrated yet, or Nexus isn't set up in the repo,
 the CodeLens and the preview both say so instead of showing stale or
 missing content silently. If Nexus isn't set up in a repo at all, no
 CodeLens appears (checked once per repo root per session — run **Nexus:
 Refresh Explainer Status**, or reload the window, after running
-`entire nexus init` on an already-open repo).
+`nexus init` on an already-open repo).
 
 ## Requirements
 
-- The `entire` CLI (this repo's Nexus fork) on `PATH`.
-- `entire nexus init` already run in the repo you're working in.
+- The `nexus` CLI on `PATH`.
+- `nexus init` already run in the repo you're working in.
 - VS Code's built-in Markdown preview (bundled by default; only matters if
   you've disabled it).
 
@@ -53,7 +53,7 @@ Development Host with the extension loaded.
 
 - **`src/cliClient.ts`** — the only place that shells out to `git` (to
   resolve the repo root for the active file — never assume a VS Code
-  workspace folder *is* the repo root) and to `entire nexus show`.
+  workspace folder *is* the repo root) and to `nexus show`.
 - **`src/explainerProvider.ts`** — a `TextDocumentContentProvider` for the
   `nexus-explainer:` URI scheme. The code path lives in the URI's path
   (with `.md` appended, so VS Code shows a sensible tab title and treats
@@ -63,7 +63,7 @@ Development Host with the extension loaded.
   No other state.
 
 Deliberately **not** built as a caching layer: every open re-shells to
-`entire nexus show`. Explainer content changes only when the `narrate`
+`nexus show`. Explainer content changes only when the `narrate`
 skill commits, which isn't a high-frequency event — the simplicity of
 "always read fresh" outweighs any latency saved by caching, and it means a
 freshly-narrated file never shows stale content from before.
