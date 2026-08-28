@@ -2,7 +2,7 @@
   "name": "nexus-explainer",
   "displayName": "Nexus Explainer",
   "description": "View Project Nexus's explainer-branch narrative for the file you're editing — a CodeLens at the top of the file, split-screen, without leaving VS Code.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "publisher": "sunprema",
   "repository": {
