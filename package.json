@@ -4,6 +4,11 @@
   "description": "View Project Nexus's explainer-branch narrative for the file you're editing — a CodeLens at the top of the file, split-screen, without leaving VS Code.",
   "version": "0.1.0",
   "license": "MIT",
+  "publisher": "sunprema",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sunprema/nexus-vscode.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -92,11 +97,13 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "vscode:prepublish": "npm run compile"
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
     "typescript": "^5.4.0"
   }
 }

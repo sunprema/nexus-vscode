@@ -39,6 +39,23 @@ Refresh Explainer Status**, or reload the window, after running
 - VS Code's built-in Markdown preview (bundled by default; only matters if
   you've disabled it).
 
+## Installation
+
+Grab the `.vsix` from the [latest release](https://github.com/sunprema/nexus-vscode/releases/latest),
+then either:
+
+- In VS Code: open the Extensions view → `...` menu → **Install from
+  VSIX...** → pick the downloaded file.
+- Or from a terminal: `code --install-extension nexus-explainer-<version>.vsix`.
+
+No cloning or Extension Development Host required.
+
+### Cutting a release (maintainers)
+
+Push a tag matching `v*.*.*` (e.g. `v0.1.0`) and CI builds the VSIX and
+attaches it to a GitHub Release automatically — see
+`.github/workflows/release.yml`. To build one locally instead: `npm run package`.
+
 ## Development
 
 ```bash

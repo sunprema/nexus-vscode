@@ -6,3 +6,6 @@ tsconfig.json
 **/.eslintrc.json
 node_modules/**
 !node_modules/**/LICENSE*
+.nexus/**
+.nexusignore
+.github/**
