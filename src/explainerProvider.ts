@@ -1,22 +1,22 @@
 import * as vscode from "vscode";
-import { fetchExplainer } from "./cliClient";
+import { NexusSource } from "./nexusSource";
 
 export const NEXUS_EXPLAINER_SCHEME = "nexus-explainer";
 
 /**
  * Builds the virtual URI for a code file's explainer entry. The code path
  * (plus ".md") lives in the URI path — so VS Code shows a sensible tab
- * title and treats the document as Markdown — and repoRoot travels as a
- * query param, since it can't be recovered from the path alone (a
+ * title and treats the document as Markdown — and the repo root travels
+ * as a query param, since it can't be recovered from the path alone (a
  * multi-root workspace, or a workspace opened at a subdirectory of the
  * repo, means the file's repo root isn't always derivable from context at
  * read time).
  */
-export function makeExplainerUri(repoRoot: string, codePath: string): vscode.Uri {
+export function makeExplainerUri(repoRoot: vscode.Uri, codePath: string): vscode.Uri {
   return vscode.Uri.from({
     scheme: NEXUS_EXPLAINER_SCHEME,
     path: `/${codePath}.md`,
-    query: `repoRoot=${encodeURIComponent(repoRoot)}`,
+    query: `repoRoot=${encodeURIComponent(repoRoot.toString())}`,
   });
 }
 
@@ -25,14 +25,16 @@ function codePathFromUri(uri: vscode.Uri): string {
 }
 
 /**
- * Serves explainer content as read-only virtual documents. Never reads the
- * explainer branch's git objects itself — every request shells out to
- * `nexus show`, so path-mapping and branch resolution stay owned by
- * nexus-cli, not duplicated here.
+ * Serves explainer content as read-only virtual documents. Never resolves
+ * the explainer branch itself — every request goes through the NexusSource
+ * it was given, so path-mapping and branch resolution stay owned by that
+ * source (nexus-cli on the desktop), not duplicated here.
  */
 export class ExplainerContentProvider implements vscode.TextDocumentContentProvider {
   private readonly changeEmitter = new vscode.EventEmitter<vscode.Uri>();
   readonly onDidChange = this.changeEmitter.event;
+
+  constructor(private readonly source: NexusSource) {}
 
   /** Call after narration may have changed a file's explainer entry, to
    * invalidate any already-open preview of it. */
@@ -41,14 +43,14 @@ export class ExplainerContentProvider implements vscode.TextDocumentContentProvi
   }
 
   async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
-    const repoRoot = new URLSearchParams(uri.query).get("repoRoot");
+    const rawRoot = new URLSearchParams(uri.query).get("repoRoot");
     const codePath = codePathFromUri(uri);
 
-    if (!repoRoot) {
+    if (!rawRoot) {
       return `_Nexus: missing repository information for \`${codePath}\`._\n`;
     }
 
-    const result = await fetchExplainer(repoRoot, codePath);
+    const result = await this.source.show(vscode.Uri.parse(rawRoot), codePath);
 
     if (result.error) {
       return `# ${codePath}\n\n> ⚠️ ${result.error}\n`;

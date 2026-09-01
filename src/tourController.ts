@@ -1,6 +1,5 @@
-import * as path from "path";
 import * as vscode from "vscode";
-import { fetchNexusMap, fetchNexusTour, NexusTourStop } from "./cliClient";
+import { NexusSource, NexusTourStop } from "./nexusSource";
 
 const NEXT = "Next";
 const PREVIOUS = "Previous";
@@ -8,13 +7,13 @@ const END_TOUR = "End Tour";
 
 /**
  * Entry point for "Nexus: Start Tour": lists the tours available in this
- * repo (from `nexus map`, filtered to kind === "tour" — no separate
- * "list tours" command needed), lets the user pick one, then walks its
- * stops. Every read goes through nexus-cli, same as the explainer/diff
- * commands, so slug resolution and stop ordering stay owned by the CLI.
+ * repo (from the source's map, filtered to kind === "tour" — no separate
+ * "list tours" call needed), lets the user pick one, then walks its stops.
+ * Every read goes through the NexusSource, same as the explainer/diff
+ * commands, so slug resolution and stop ordering stay owned by it.
  */
-export async function startTour(repoRoot: string): Promise<void> {
-  const map = await fetchNexusMap(repoRoot);
+export async function startTour(source: NexusSource, repoRoot: vscode.Uri): Promise<void> {
+  const map = await source.map(repoRoot);
   if (map.error) {
     vscode.window.showWarningMessage(`Nexus: ${map.error}`);
     return;
@@ -36,7 +35,7 @@ export async function startTour(repoRoot: string): Promise<void> {
   );
   if (!picked) return;
 
-  const tour = await fetchNexusTour(repoRoot, picked.slug);
+  const tour = await source.tour(repoRoot, picked.slug);
   if (tour.error) {
     vscode.window.showWarningMessage(`Nexus: ${tour.error}`);
     return;
@@ -51,14 +50,19 @@ export async function startTour(repoRoot: string): Promise<void> {
 
 /** Walks stops in order, letting each step choose the next index (or -1 to
  * stop), so Previous/Next/dismiss are all just different return values. */
-async function runTour(repoRoot: string, title: string, stops: NexusTourStop[]): Promise<void> {
+async function runTour(repoRoot: vscode.Uri, title: string, stops: NexusTourStop[]): Promise<void> {
   let index = 0;
   while (index >= 0 && index < stops.length) {
     index = await showStop(repoRoot, title, stops, index);
   }
 }
 
-async function showStop(repoRoot: string, title: string, stops: NexusTourStop[], index: number): Promise<number> {
+async function showStop(
+  repoRoot: vscode.Uri,
+  title: string,
+  stops: NexusTourStop[],
+  index: number
+): Promise<number> {
   const stop = stops[index];
   try {
     await openStop(repoRoot, stop);
@@ -78,10 +82,12 @@ async function showStop(repoRoot: string, title: string, stops: NexusTourStop[],
   return -1; // END_TOUR, or the notification was dismissed.
 }
 
-/** Opens a stop's file and, when it names a line, selects and reveals it. */
-async function openStop(repoRoot: string, stop: NexusTourStop): Promise<void> {
-  const fsPath = path.join(repoRoot, ...stop.path.split("/"));
-  const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fsPath));
+/** Opens a stop's file and, when it names a line, selects and reveals it.
+ * Joins onto the repo root's URI rather than building a filesystem path,
+ * so a stop opens the same way in a virtual workspace as a local one. */
+async function openStop(repoRoot: vscode.Uri, stop: NexusTourStop): Promise<void> {
+  const uri = vscode.Uri.joinPath(repoRoot, ...stop.path.split("/"));
+  const doc = await vscode.workspace.openTextDocument(uri);
   const editor = await vscode.window.showTextDocument(doc, { preview: true });
 
   if (!stop.line || stop.line < 1) return;

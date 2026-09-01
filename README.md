@@ -72,21 +72,35 @@ Development Host with the extension loaded.
 
 ## Architecture notes
 
-- **`src/cliClient.ts`** — the only place that shells out to `git` (to
-  resolve the repo root for the active file — never assume a VS Code
-  workspace folder *is* the repo root) and to `nexus show`.
+- **`src/nexusSource.ts`** — the `NexusSource` interface every provider and
+  command works against ("what data does this extension need"), plus the
+  result types mirroring nexus-cli's `--json` shapes. Repositories are
+  identified by a `vscode.Uri`, never a filesystem path, so the same code
+  can serve a local repo or a virtual one.
+- **`src/cliSource.ts`** — the desktop implementation of that interface:
+  the only place that shells out to `git` (to resolve the repo root for the
+  active file — never assume a VS Code workspace folder *is* the repo root)
+  and to `nexus show`/`diff`/`map`/`tour`. It serves `file:` repositories
+  only.
 - **`src/explainerProvider.ts`** — a `TextDocumentContentProvider` for the
   `nexus-explainer:` URI scheme. The code path lives in the URI's path
   (with `.md` appended, so VS Code shows a sensible tab title and treats
   the content as Markdown); the resolved repo root travels as a query
   param, since it isn't always derivable from the URI alone.
-- **`src/extension.ts`** — wires up the command and the content provider.
-  No other state.
+- **`src/extension.ts`** — `activate` wires the CLI source to `file:`
+  documents; `activateNexus` takes the source and document selector as
+  arguments so a second entry point can supply different ones. No other
+  state.
 
-Deliberately **not** built as a caching layer: every open re-shells to
-`nexus show`. Explainer content changes only when the `narrate`
-skill commits, which isn't a high-frequency event — the simplicity of
-"always read fresh" outweighs any latency saved by caching, and it means a
+`NexusSource.diff` is deliberately optional: walking the explainer
+branch's history is cheap for a local git repo and expensive over an API,
+so a source may omit it, and the "Show Explainer Diff" command is
+registered only when the active source has it.
+
+Deliberately **not** built as a caching layer: every open re-reads through
+the source. Explainer content changes only when the `narrate` skill
+commits, which isn't a high-frequency event — the simplicity of "always
+read fresh" outweighs any latency saved by caching, and it means a
 freshly-narrated file never shows stale content from before.
 
 ## Roadmap (not yet built)
@@ -99,3 +113,8 @@ freshly-narrated file never shows stale content from before.
   narrated at all.
 - Scroll-sync between code and explainer — needs the line-mapping
   ("sourcemap") piece from TR4.3, deliberately deferred so far.
+- A **web build** (`vscode.dev` / `github.dev`), where there is no process
+  to shell out to and no filesystem: a second `NexusSource` reading the
+  explainer branch over GitHub's API, a `browser` entry point calling
+  `activateNexus` with it, and bundling. The interface seam above is in
+  place for it; nothing else is.

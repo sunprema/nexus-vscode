@@ -1,39 +1,64 @@
-import * as path from "path";
 import * as vscode from "vscode";
+import { CliNexusSource } from "./cliSource";
 import { ExplainerCodeLensProvider } from "./codeLensProvider";
-import { fetchExplainerDiff, resolveRepoRoot, resolveRepoRootForDir } from "./cliClient";
-import { ExplainerContentProvider, NEXUS_EXPLAINER_SCHEME, makeExplainerUri } from "./explainerProvider";
+import {
+  ExplainerContentProvider,
+  NEXUS_EXPLAINER_SCHEME,
+  makeExplainerUri,
+} from "./explainerProvider";
+import { NexusSource, relativeCodePath } from "./nexusSource";
 import { startTour } from "./tourController";
 
+/**
+ * The desktop entry point (package.json's "main"): wire up the CLI-backed
+ * source over local files. A browser-hosted entry point ("browser") would
+ * differ only in the two arguments it passes — a source that reads GitHub
+ * over HTTP, and the URI schemes a virtual workspace uses — which is why
+ * activateNexus below takes both rather than deciding for itself.
+ */
 export function activate(context: vscode.ExtensionContext): void {
-  const contentProvider = new ExplainerContentProvider();
+  activateNexus(context, new CliNexusSource(), { scheme: "file" });
+}
+
+export function activateNexus(
+  context: vscode.ExtensionContext,
+  source: NexusSource,
+  documentSelector: vscode.DocumentSelector
+): void {
+  const contentProvider = new ExplainerContentProvider(source);
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(NEXUS_EXPLAINER_SCHEME, contentProvider)
   );
 
-  const codeLensProvider = new ExplainerCodeLensProvider();
+  const codeLensProvider = new ExplainerCodeLensProvider(source);
   context.subscriptions.push(
-    vscode.languages.registerCodeLensProvider({ scheme: "file" }, codeLensProvider)
+    vscode.languages.registerCodeLensProvider(documentSelector, codeLensProvider)
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("nexus.showExplainer", async (resource?: vscode.Uri) => {
-      const target = await resolveCodeTarget(resource);
+      const target = await resolveCodeTarget(source, resource);
       if (!target) return;
       await openExplainerPreview(contentProvider, makeExplainerUri(target.repoRoot, target.codePath));
     })
   );
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand("nexus.showExplainerDiff", async (resource?: vscode.Uri) => {
-      const target = await resolveCodeTarget(resource);
-      if (!target) return;
+  // Registered only when the source can produce a diff: walking the
+  // explainer branch's history is cheap locally and expensive over an API,
+  // so NexusSource.diff is optional (see its doc comment).
+  const diff = source.diff?.bind(source);
+  if (diff) {
+    context.subscriptions.push(
+      vscode.commands.registerCommand("nexus.showExplainerDiff", async (resource?: vscode.Uri) => {
+        const target = await resolveCodeTarget(source, resource);
+        if (!target) return;
 
-      const diff = await fetchExplainerDiff(target.repoRoot, target.codePath);
-      const doc = await vscode.workspace.openTextDocument({ content: diff, language: "diff" });
-      await vscode.window.showTextDocument(doc, { preview: true });
-    })
-  );
+        const content = await diff(target.repoRoot, target.codePath);
+        const doc = await vscode.workspace.openTextDocument({ content, language: "diff" });
+        await vscode.window.showTextDocument(doc, { preview: true });
+      })
+    );
+  }
 
   // Internal: the CodeLens already resolved the exact URI (repo root +
   // code path) when it built its title, so its click handler passes that
@@ -53,20 +78,25 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("nexus.startTour", async () => {
-      const repoRoot = await resolveWorkspaceRepoRoot();
+      const repoRoot = await resolveWorkspaceRepoRoot(source);
       if (!repoRoot) {
         vscode.window.showWarningMessage("Nexus: open a file or folder inside a git repository first.");
         return;
       }
-      await startTour(repoRoot);
+      await startTour(source, repoRoot);
     })
   );
 }
 
 interface CodeTarget {
-  repoRoot: string;
+  repoRoot: vscode.Uri;
   codePath: string;
 }
+
+/** Schemes that are never a narratable code file, whatever the source is:
+ * a buffer that was never saved, and this extension's own read-only
+ * explainer previews (from which "Show Explainer" would be circular). */
+const NON_CODE_SCHEMES = new Set(["untitled", NEXUS_EXPLAINER_SCHEME]);
 
 /**
  * Resolves the repo-relative code path a command should act on. Explorer's
@@ -74,24 +104,29 @@ interface CodeTarget {
  * editor context menu, Command Palette, and ctrl+alt+e don't, so this falls
  * back to the active editor. Shared by every command that needs "which
  * file", so the fallback logic can't drift between them.
+ *
+ * Which URI schemes are actually servable is the source's call, not this
+ * function's — it asks by trying to resolve a repo root.
  */
-async function resolveCodeTarget(resource?: vscode.Uri): Promise<CodeTarget | undefined> {
-  const uri = resource?.scheme === "file" ? resource : vscode.window.activeTextEditor?.document.uri;
-  if (!uri || uri.scheme !== "file") {
+async function resolveCodeTarget(source: NexusSource, resource?: vscode.Uri): Promise<CodeTarget | undefined> {
+  const uri = resource ?? vscode.window.activeTextEditor?.document.uri;
+  if (!uri || NON_CODE_SCHEMES.has(uri.scheme)) {
     vscode.window.showInformationMessage("Nexus: open a file first.");
     return undefined;
   }
 
-  const fileFsPath = uri.fsPath;
-  const repoRoot = await resolveRepoRoot(fileFsPath);
+  const repoRoot = await source.resolveRepoRoot(uri);
   if (!repoRoot) {
     vscode.window.showWarningMessage("Nexus: this file doesn't appear to be inside a git repository.");
     return undefined;
   }
 
-  // Git (and nexus-cli) expect forward-slash-separated relative paths
-  // regardless of platform; path.relative uses the OS separator.
-  const codePath = path.relative(repoRoot, fileFsPath).split(path.sep).join("/");
+  const codePath = relativeCodePath(repoRoot, uri);
+  if (!codePath) {
+    vscode.window.showWarningMessage("Nexus: this file isn't inside the repository it resolved to.");
+    return undefined;
+  }
+
   return { repoRoot, codePath };
 }
 
@@ -100,15 +135,15 @@ async function resolveCodeTarget(resource?: vscode.Uri): Promise<CodeTarget | un
  * starting a tour): the active editor's file if there is one, else the
  * first workspace folder.
  */
-async function resolveWorkspaceRepoRoot(): Promise<string | undefined> {
+async function resolveWorkspaceRepoRoot(source: NexusSource): Promise<vscode.Uri | undefined> {
   const activeUri = vscode.window.activeTextEditor?.document.uri;
-  if (activeUri?.scheme === "file") {
-    const repoRoot = await resolveRepoRoot(activeUri.fsPath);
+  if (activeUri && !NON_CODE_SCHEMES.has(activeUri.scheme)) {
+    const repoRoot = await source.resolveRepoRoot(activeUri);
     if (repoRoot) return repoRoot;
   }
 
   const folder = vscode.workspace.workspaceFolders?.[0];
-  return folder ? resolveRepoRootForDir(folder.uri.fsPath) : undefined;
+  return folder ? source.resolveRepoRootForDir(folder.uri) : undefined;
 }
 
 async function openExplainerPreview(provider: ExplainerContentProvider, uri: vscode.Uri): Promise<void> {

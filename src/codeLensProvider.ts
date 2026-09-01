@@ -1,8 +1,6 @@
-import * as fs from "fs";
-import * as path from "path";
 import * as vscode from "vscode";
-import { fetchExplainer, resolveRepoRoot } from "./cliClient";
 import { makeExplainerUri } from "./explainerProvider";
+import { NexusSource, relativeCodePath } from "./nexusSource";
 
 /**
  * A CodeLens carrying the repo root and code path it was created for, so
@@ -12,7 +10,7 @@ import { makeExplainerUri } from "./explainerProvider";
  * for test files is TestIntentCodeLens below, not this class.
  */
 class ExplainerCodeLens extends vscode.CodeLens {
-  constructor(range: vscode.Range, readonly repoRoot: string, readonly codePath: string) {
+  constructor(range: vscode.Range, readonly repoRoot: vscode.Uri, readonly codePath: string) {
     super(range);
   }
 }
@@ -22,8 +20,8 @@ class ExplainerCodeLens extends vscode.CodeLens {
  * test is (textually) found — see findTestLine. Unlike ExplainerCodeLens,
  * this is fully resolved up front (command + title set in the
  * constructor): its position AND its content both come from the same
- * `nexus show` call, so there's no separate cheaper "just show a
- * placeholder" phase to defer work to.
+ * `show` call, so there's no separate cheaper "just show a placeholder"
+ * phase to defer work to.
  */
 class TestIntentCodeLens extends vscode.CodeLens {
   constructor(range: vscode.Range, explainerUri: vscode.Uri, intent: string) {
@@ -58,6 +56,13 @@ function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 1) + "…" : text;
 }
 
+/** Cache key for "which repo is this file in": the file's parent
+ * directory, as a string, for any URI scheme. */
+function directoryKey(uri: vscode.Uri): string {
+  const key = uri.toString();
+  return key.slice(0, key.lastIndexOf("/"));
+}
+
 /**
  * Shows a CodeLens at the top of any file inside a Nexus-enabled repo,
  * resolving to the file's explainer status (found / not yet narrated /
@@ -74,22 +79,23 @@ function truncate(text: string, max: number): string {
  * its *title* needs re-resolving, lazily, in resolveCodeLens), a test
  * lens's *position* depends on the file's current text, so the whole
  * lookup has to happen up front in provideCodeLenses and is worth
- * memoizing per edit rather than re-shelling out on every call for an
- * unchanged buffer. Running `nexus init` on an already-open repo
- * won't make lenses appear on its own — run "Nexus: Refresh Explainer
- * Status" (which clears all three caches; see refresh()), or reload the
- * window. The top lens's own found/desynced status is never cached:
- * resolveCodeLens always re-shells to `nexus show`, matching
- * ExplainerContentProvider's "always read fresh" choice, since that call
- * is cheap (a git-object read, no LLM).
+ * memoizing per edit rather than re-querying the source for an unchanged
+ * buffer. Running `nexus init` on an already-open repo won't make lenses
+ * appear on its own — run "Nexus: Refresh Explainer Status" (which clears
+ * all three caches; see refresh()), or reload the window. The top lens's
+ * own found/desynced status is never cached: resolveCodeLens always
+ * re-queries the source, matching ExplainerContentProvider's "always read
+ * fresh" choice, since that call is cheap (a git-object read, no LLM).
  */
 export class ExplainerCodeLensProvider implements vscode.CodeLensProvider<NexusCodeLens> {
   private readonly changeEmitter = new vscode.EventEmitter<void>();
   readonly onDidChangeCodeLenses = this.changeEmitter.event;
 
-  private readonly repoRootCache = new Map<string, Promise<string | undefined>>();
-  private readonly nexusEnabledCache = new Map<string, boolean>();
+  private readonly repoRootCache = new Map<string, Promise<vscode.Uri | undefined>>();
+  private readonly nexusEnabledCache = new Map<string, Promise<boolean>>();
   private readonly testIntentCache = new Map<string, { version: number; lenses: TestIntentCodeLens[] }>();
+
+  constructor(private readonly source: NexusSource) {}
 
   /** Clears every cache and forces every visible editor to re-request its
    * CodeLenses. This is what "Nexus: Refresh Explainer Status" calls — the
@@ -103,16 +109,16 @@ export class ExplainerCodeLensProvider implements vscode.CodeLensProvider<NexusC
   }
 
   async provideCodeLenses(document: vscode.TextDocument): Promise<NexusCodeLens[]> {
-    if (document.uri.scheme !== "file") {
+    const repoRoot = await this.getRepoRoot(document.uri);
+    if (!repoRoot || !(await this.isNexusEnabled(repoRoot))) {
       return [];
     }
 
-    const repoRoot = await this.getRepoRoot(document.uri.fsPath);
-    if (!repoRoot || !this.isNexusEnabled(repoRoot)) {
+    const codePath = relativeCodePath(repoRoot, document.uri);
+    if (!codePath) {
       return [];
     }
 
-    const codePath = path.relative(repoRoot, document.uri.fsPath).split(path.sep).join("/");
     const lenses: NexusCodeLens[] = [new ExplainerCodeLens(new vscode.Range(0, 0, 0, 0), repoRoot, codePath)];
 
     if (looksLikeTestFile(codePath)) {
@@ -130,7 +136,7 @@ export class ExplainerCodeLensProvider implements vscode.CodeLensProvider<NexusC
       return codeLens;
     }
 
-    const result = await fetchExplainer(codeLens.repoRoot, codeLens.codePath);
+    const result = await this.source.show(codeLens.repoRoot, codeLens.codePath);
     const uri = makeExplainerUri(codeLens.repoRoot, codeLens.codePath);
 
     let title: string;
@@ -152,23 +158,24 @@ export class ExplainerCodeLensProvider implements vscode.CodeLensProvider<NexusC
     return codeLens;
   }
 
-  private getRepoRoot(fileFsPath: string): Promise<string | undefined> {
-    const dir = path.dirname(fileFsPath);
-    let cached = this.repoRootCache.get(dir);
+  private getRepoRoot(fileUri: vscode.Uri): Promise<vscode.Uri | undefined> {
+    const key = directoryKey(fileUri);
+    let cached = this.repoRootCache.get(key);
     if (!cached) {
-      cached = resolveRepoRoot(fileFsPath);
-      this.repoRootCache.set(dir, cached);
+      cached = this.source.resolveRepoRoot(fileUri);
+      this.repoRootCache.set(key, cached);
     }
     return cached;
   }
 
-  private isNexusEnabled(repoRoot: string): boolean {
-    let enabled = this.nexusEnabledCache.get(repoRoot);
-    if (enabled === undefined) {
-      enabled = fs.existsSync(path.join(repoRoot, ".nexus", "settings.json"));
-      this.nexusEnabledCache.set(repoRoot, enabled);
+  private isNexusEnabled(repoRoot: vscode.Uri): Promise<boolean> {
+    const key = repoRoot.toString();
+    let cached = this.nexusEnabledCache.get(key);
+    if (!cached) {
+      cached = this.source.isEnabled(repoRoot);
+      this.nexusEnabledCache.set(key, cached);
     }
-    return enabled;
+    return cached;
   }
 
   /** Fetches the file's explainer entry, matches each `tests` entry to a
@@ -176,7 +183,7 @@ export class ExplainerCodeLensProvider implements vscode.CodeLensProvider<NexusC
    * document version — see the class doc comment for why this one caches
    * differently from the other two. */
   private async getTestIntentLenses(
-    repoRoot: string,
+    repoRoot: vscode.Uri,
     codePath: string,
     document: vscode.TextDocument
   ): Promise<TestIntentCodeLens[]> {
@@ -186,7 +193,7 @@ export class ExplainerCodeLensProvider implements vscode.CodeLensProvider<NexusC
       return cached.lenses;
     }
 
-    const result = await fetchExplainer(repoRoot, codePath);
+    const result = await this.source.show(repoRoot, codePath);
     const explainerUri = makeExplainerUri(repoRoot, codePath);
     const text = document.getText();
 
