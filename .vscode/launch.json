@@ -6,7 +6,19 @@
       "type": "extensionHost",
       "request": "launch",
       "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
-      "outFiles": ["${workspaceFolder}/out/**/*.js"],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "preLaunchTask": "${defaultBuildTask}"
+    },
+    {
+      "name": "Run Nexus Explainer Extension (Web)",
+      "type": "extensionHost",
+      "request": "launch",
+      "debugWebWorkerHost": true,
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--extensionDevelopmentKind=web"
+      ],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
       "preLaunchTask": "${defaultBuildTask}"
     }
   ]

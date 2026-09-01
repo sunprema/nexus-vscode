@@ -19,6 +19,21 @@ export interface AuthSession {
 /** Set by a test to control what `authentication.getSession` returns. */
 export const auth: { session?: AuthSession } = {};
 
+/** What an activated extension registered, so a test can assert on it
+ * without an editor. Reset between bundles. */
+export const registry = {
+  commands: [] as string[],
+  contentProviderSchemes: [] as string[],
+  codeLensSelectors: [] as unknown[],
+  reset(): void {
+    registry.commands = [];
+    registry.contentProviderSchemes = [];
+    registry.codeLensSelectors = [];
+  },
+};
+
+const disposable = { dispose() {} };
+
 const stub = {
   authentication: {
     getSession: async () => auth.session,
@@ -29,9 +44,43 @@ const stub = {
         throw new Error("vscodeStub: workspace.fs.stat is not stubbed for this test");
       },
     },
+    workspaceFolders: undefined as unknown,
+    registerTextDocumentContentProvider: (scheme: string) => {
+      registry.contentProviderSchemes.push(scheme);
+      return disposable;
+    },
+  },
+  languages: {
+    registerCodeLensProvider: (selector: unknown) => {
+      registry.codeLensSelectors.push(selector);
+      return disposable;
+    },
+  },
+  commands: {
+    registerCommand: (id: string) => {
+      registry.commands.push(id);
+      return disposable;
+    },
+    executeCommand: async () => undefined,
+  },
+  window: {
+    activeTextEditor: undefined as unknown,
+    showInformationMessage: async () => undefined,
+    showWarningMessage: async () => undefined,
+  },
+  /** CodeLens is subclassed at module load, so it has to be a real class. */
+  CodeLens: class {
+    constructor(readonly range: unknown, public command?: unknown) {}
+  },
+  Range: class {
+    constructor(...args: number[]) {
+      this.args = args;
+    }
+    args: number[];
   },
   Uri: {
     parse: (value: string) => uri(value),
+    from: (parts: { scheme?: string; path?: string }) => uri(parts),
   },
   EventEmitter: class {
     event = () => undefined;

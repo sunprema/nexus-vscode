@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import { CliNexusSource } from "./cliSource";
 import { ExplainerCodeLensProvider } from "./codeLensProvider";
 import {
   ExplainerContentProvider,
@@ -10,16 +9,11 @@ import { NexusSource, relativeCodePath } from "./nexusSource";
 import { startTour } from "./tourController";
 
 /**
- * The desktop entry point (package.json's "main"): wire up the CLI-backed
- * source over local files. A browser-hosted entry point ("browser") would
- * differ only in the two arguments it passes — a source that reads GitHub
- * over HTTP, and the URI schemes a virtual workspace uses — which is why
- * activateNexus below takes both rather than deciding for itself.
+ * Everything this extension does, given somewhere to read explainer data
+ * from and the documents to offer it on. The two entry points
+ * (extensionNode.ts, extensionWeb.ts) differ only in those two arguments:
+ * the CLI over local files, or GitHub over a virtual workspace.
  */
-export function activate(context: vscode.ExtensionContext): void {
-  activateNexus(context, new CliNexusSource(), { scheme: "file" });
-}
-
 export function activateNexus(
   context: vscode.ExtensionContext,
   source: NexusSource,
@@ -152,5 +146,3 @@ async function openExplainerPreview(provider: ExplainerContentProvider, uri: vsc
   provider.refresh(uri);
   await vscode.commands.executeCommand("markdown.showPreviewToSide", uri);
 }
-
-export function deactivate(): void {}

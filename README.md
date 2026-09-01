@@ -19,11 +19,21 @@ There's exactly one CodeLens per file, not per function — Nexus narrates
 a whole file at a time, so a per-symbol lens would have nothing distinct
 to point at yet (that needs the line-mapping piece from TR4.3, not built).
 
-Nothing is checked out or written to disk. The extension shells out to
-[`nexus show <path> --json`](../nexus-cli/internal/cli/show.go)
+Nothing is checked out or written to disk. On the desktop the extension
+shells out to [`nexus show <path> --json`](../nexus-cli/internal/cli/show.go)
 — the same command a script or CI job would use — which reads the
 explainer branch's git objects directly. `nexus` (Project Nexus's standalone
 CLI) must be installed and on `PATH`.
+
+**In the browser** — `vscode.dev` and `github.dev`, where a repository is
+mounted as a virtual filesystem and there is no process to shell out to —
+the same CodeLens and preview are served by reading the explainer branch
+from GitHub over HTTP instead. Nothing to install locally: open
+`github.dev/<owner>/<repo>` and the narrative is there. It borrows your
+existing GitHub session when you have one, so private repos work too, and
+falls back to unauthenticated reads of public ones. The only thing missing
+in the browser is **Nexus: Show Explainer Diff**, which needs the CLI's
+history walk.
 
 If the file hasn't been narrated yet, or Nexus isn't set up in the repo,
 the CodeLens and the preview both say so instead of showing stale or
@@ -34,10 +44,12 @@ Refresh Explainer Status**, or reload the window, after running
 
 ## Requirements
 
-- The `nexus` CLI on `PATH`.
 - `nexus init` already run in the repo you're working in.
 - VS Code's built-in Markdown preview (bundled by default; only matters if
   you've disabled it).
+- **Desktop only:** the `nexus` CLI on `PATH`. The browser build has no CLI
+  and needs none; it reads the same data from GitHub, and so works only for
+  repositories hosted there.
 
 ## Installation
 
@@ -64,9 +76,21 @@ attaches it to a GitHub Release automatically — see
 
 ```bash
 npm install
-npm run compile   # or: npm run watch
-npm test          # compiles, then runs the unit tests (Node 22+)
+npm run bundle    # builds both entry points; or: npm run watch
+npm test          # typechecks, bundles, then runs the unit tests (Node 22+)
+npm run test:web  # opens the web build in a browser-hosted VS Code
 ```
+
+`esbuild.mjs` builds the two files VS Code actually loads —
+`dist/extension-node.js` (`main`) and `dist/extension-web.js` (`browser`).
+Bundling isn't optional for the web build: a web extension ships as a
+single file with no runtime module resolution. It also enforces the split
+by construction — `platform: "browser"` can't resolve `child_process`, so a
+web build that ever reached `cliSource.ts` fails to build rather than
+throwing on activation.
+
+`npm run compile` (plain `tsc`) still emits to `out/` — that's what the
+tests run against, and it's excluded from the packaged extension.
 
 The tests run under plain `node --test`, not in an Extension Development
 Host: `src/test/vscodeStub.ts` stands in for the `vscode` module so the
@@ -95,8 +119,7 @@ Development Host with the extension loaded.
   existing GitHub session when there is one (never prompting for a new
   one), which is what lets it read private repos; without one it reads
   public repos through `raw.githubusercontent.com`, which isn't rate
-  limited. It implements no `diff`. Not wired to an entry point yet — see
-  the roadmap.
+  limited. It implements no `diff`.
 - **`src/cliSource.ts`** — the desktop implementation of that interface:
   the only place that shells out to `git` (to resolve the repo root for the
   active file — never assume a VS Code workspace folder *is* the repo root)
@@ -107,10 +130,14 @@ Development Host with the extension loaded.
   (with `.md` appended, so VS Code shows a sensible tab title and treats
   the content as Markdown); the resolved repo root travels as a query
   param, since it isn't always derivable from the URI alone.
-- **`src/extension.ts`** — `activate` wires the CLI source to `file:`
-  documents; `activateNexus` takes the source and document selector as
-  arguments so a second entry point can supply different ones. No other
-  state.
+- **`src/activation.ts`** — everything the extension does, given a source
+  and a document selector: `activateNexus` registers the providers and
+  commands and nothing else knows which host it's on. No other state.
+- **`src/extensionNode.ts` / `src/extensionWeb.ts`** — the two entry
+  points, each a dozen lines: the CLI source over `file:` documents, or the
+  GitHub source over `vscode-vfs:` ones. `vscode-vfs` rather than `*`
+  because a browser window also holds `untitled` buffers and locally opened
+  folders, which are not GitHub repositories.
 
 `NexusSource.diff` is deliberately optional: walking the explainer
 branch's history is cheap for a local git repo and expensive over an API,
@@ -133,10 +160,15 @@ freshly-narrated file never shows stale content from before.
   narrated at all.
 - Scroll-sync between code and explainer — needs the line-mapping
   ("sourcemap") piece from TR4.3, deliberately deferred so far.
-- The **web build** itself. `src/githubSource.ts` is written and tested,
-  but nothing loads it yet: that needs a `browser` entry point in
-  `package.json` calling `activateNexus` with it and the virtual-workspace
-  schemes, a bundler (web extensions must ship as a single file — which
-  also inlines js-yaml and lets `.vscodeignore` stop hand-listing it),
-  `capabilities.virtualWorkspaces`, and a run through
-  `@vscode/test-web`.
+- **Publishing the web build.** The VSIX is already marked
+  `ExtensionKind: workspace,web`, but installing it in `vscode.dev` /
+  `github.dev` means publishing to the Marketplace — a VSIX can't be
+  side-loaded there. A `.vscode/extensions.json` recommendation in a
+  narrated repo then turns that into a one-click prompt for visitors.
+- **`nexus diff` in the browser.** It would need the commits API to walk a
+  file's explainer history: two extra requests and a diff library, against
+  a rate limit, for what the CLI does with two local git-object reads.
+- **The virtual-workspace URI shape.** `parseGitHubRepo` accepts
+  `vscode-vfs://github/<owner>/<repo>` and the `github+<id>` authority
+  variant. Confirm against a real `github.dev` window before relying on
+  it.
