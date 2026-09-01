@@ -107,7 +107,16 @@ export interface NexusSource {
   /** One code file's current explainer entry. */
   show(repoRoot: vscode.Uri, codePath: string): Promise<NexusShowResult>;
 
-  /** The whole-branch index of explainer entries and guided tours. */
+  /**
+   * The whole-branch index of explainer entries and guided tours.
+   *
+   * `path` and `kind` are always populated. The per-entry detail fields
+   * (`summary`, `source_commit`, `desynced`, `has_frontmatter`,
+   * `stop_count`) are best-effort: a source that would need one request
+   * per narrated file to fill them in may leave them empty rather than
+   * make hundreds of them. Treat an absent summary as "unknown", not as
+   * "this file has none".
+   */
   map(repoRoot: vscode.Uri): Promise<NexusMapResult>;
 
   /** One guided tour's ordered stops. */

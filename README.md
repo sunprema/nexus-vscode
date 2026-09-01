@@ -65,7 +65,14 @@ attaches it to a GitHub Release automatically — see
 ```bash
 npm install
 npm run compile   # or: npm run watch
+npm test          # compiles, then runs the unit tests (Node 22+)
 ```
+
+The tests run under plain `node --test`, not in an Extension Development
+Host: `src/test/vscodeStub.ts` stands in for the `vscode` module so the
+parsing and GitHub-request logic can be exercised directly. Anything that
+genuinely needs the editor (CodeLens placement, the Markdown preview) is
+still only verified by hand.
 
 Press F5 in VS Code (with this folder open) to launch an Extension
 Development Host with the extension loaded.
@@ -77,6 +84,19 @@ Development Host with the extension loaded.
   result types mirroring nexus-cli's `--json` shapes. Repositories are
   identified by a `vscode.Uri`, never a filesystem path, so the same code
   can serve a local repo or a virtual one.
+- **`src/githubSource.ts`** — a second implementation, reading the
+  explainer branch straight from GitHub over HTTP for a VS Code with no
+  subprocess and no filesystem (`vscode.dev`, `github.dev`, where a repo is
+  mounted at `vscode-vfs://github/<owner>/<repo>`). It reimplements rather
+  than delegates the three conventions nexus-cli owns — `<path>.md` on the
+  explainer branch, the reserved `.nexus/tours/` and `.nexus/history/`
+  prefixes, and frontmatter beating the desync-marker scan — so those are
+  the places it must change when the CLI does. It borrows the user's
+  existing GitHub session when there is one (never prompting for a new
+  one), which is what lets it read private repos; without one it reads
+  public repos through `raw.githubusercontent.com`, which isn't rate
+  limited. It implements no `diff`. Not wired to an entry point yet — see
+  the roadmap.
 - **`src/cliSource.ts`** — the desktop implementation of that interface:
   the only place that shells out to `git` (to resolve the repo root for the
   active file — never assume a VS Code workspace folder *is* the repo root)
@@ -113,8 +133,10 @@ freshly-narrated file never shows stale content from before.
   narrated at all.
 - Scroll-sync between code and explainer — needs the line-mapping
   ("sourcemap") piece from TR4.3, deliberately deferred so far.
-- A **web build** (`vscode.dev` / `github.dev`), where there is no process
-  to shell out to and no filesystem: a second `NexusSource` reading the
-  explainer branch over GitHub's API, a `browser` entry point calling
-  `activateNexus` with it, and bundling. The interface seam above is in
-  place for it; nothing else is.
+- The **web build** itself. `src/githubSource.ts` is written and tested,
+  but nothing loads it yet: that needs a `browser` entry point in
+  `package.json` calling `activateNexus` with it and the virtual-workspace
+  schemes, a bundler (web extensions must ship as a single file — which
+  also inlines js-yaml and lets `.vscodeignore` stop hand-listing it),
+  `capabilities.virtualWorkspaces`, and a run through
+  `@vscode/test-web`.

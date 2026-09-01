@@ -1,11 +1,21 @@
 .vscode/**
 src/**
+out/test/**
 .gitignore
 tsconfig.json
 **/*.map
 **/.eslintrc.json
-node_modules/**
-!node_modules/**/LICENSE*
 .nexus/**
 .nexusignore
 .github/**
+
+# node_modules is excluded wholesale, then exactly the three files needed
+# to require("js-yaml") at runtime are let back in — it parses explainer
+# frontmatter the same way nexus-cli does, for the GitHub-backed source.
+# Listing files rather than the package keeps the browser bundles, CLI bin
+# and 1 MB of source maps out. When this extension gains a bundler these
+# four lines can go: js-yaml will be inlined into the build output.
+node_modules/**
+!node_modules/js-yaml/package.json
+!node_modules/js-yaml/dist/js-yaml.cjs.js
+!node_modules/js-yaml/LICENSE

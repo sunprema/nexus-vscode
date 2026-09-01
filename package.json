@@ -1,7 +1,7 @@
 {
   "name": "nexus-explainer",
   "displayName": "Nexus Explainer",
-  "description": "View Project Nexus's explainer-branch narrative for the file you're editing — a CodeLens at the top of the file, split-screen, without leaving VS Code.",
+  "description": "View Project Nexus's explainer-branch narrative for the file you're editing \u2014 a CodeLens at the top of the file, split-screen, without leaving VS Code.",
   "version": "0.2.0",
   "license": "MIT",
   "publisher": "sunprema",
@@ -97,6 +97,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test \"out/test/*.test.js\"",
     "vscode:prepublish": "npm run compile",
     "package": "vsce package"
   },
@@ -105,5 +106,8 @@
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.2.1",
     "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "js-yaml": "^5.4.1"
   }
 }
